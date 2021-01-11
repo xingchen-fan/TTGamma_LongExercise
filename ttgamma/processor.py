@@ -7,6 +7,7 @@ from coffea.nanoevents import NanoEventsFactory, NanoAODSchema
 from coffea.lookup_tools import extractor, dense_lookup
 from coffea.btag_tools import BTagScaleFactor
 from coffea.analysis_tools import PackedSelection
+from coffea.jetmet_tools import CorrectedJetsFactory, JECStack
 
 import awkward as ak
 import numpy as np
@@ -29,8 +30,6 @@ puLookup = util.load(f'{cwd}/ScaleFactors/puLookup.coffea')
 puLookup_Down = util.load(f'{cwd}/ScaleFactors/puLookup_Down.coffea')
 puLookup_Up = util.load(f'{cwd}/ScaleFactors/puLookup_Up.coffea')
 
-
-"""
 Jetext = extractor()
 Jetext.add_weight_sets([
         f"* * {cwd}/ScaleFactors/JEC/Summer16_07Aug2017_V11_MC_L1FastJet_AK4PFchs.jec.txt",
@@ -42,22 +41,23 @@ Jetext.add_weight_sets([
 Jetext.finalize()
 Jetevaluator = Jetext.make_evaluator()
 
-jec_names = ['Summer16_07Aug2017_V11_MC_L1FastJet_AK4PFchs','Summer16_07Aug2017_V11_MC_L2Relative_AK4PFchs']
-junc_names = ['Summer16_07Aug2017_V11_MC_Uncertainty_AK4PFchs']
+jec_names = ['Summer16_07Aug2017_V11_MC_L1FastJet_AK4PFchs','Summer16_07Aug2017_V11_MC_L2Relative_AK4PFchs', 'Summer16_07Aug2017_V11_MC_Uncertainty_AK4PFchs', 'Summer16_25nsV1_MC_PtResolution_AK4PFchs', 'Summer16_25nsV1_MC_SF_AK4PFchs']
 
-jer_names = ['Summer16_25nsV1_MC_PtResolution_AK4PFchs']
-jersf_names = ['Summer16_25nsV1_MC_SF_AK4PFchs']
+jec_inputs = {name: Jetevaluator[name] for name in jec_names}
+jec_stack = JECStack(jec_inputs)
 
+name_map = jec_stack.blank_name_map
+name_map['JetPt'] = 'pt'
+name_map['JetMass'] = 'mass'
+name_map['JetEta'] = 'eta'
+name_map['JetA'] = 'area'
 
-JECcorrector = FactorizedJetCorrector(**{name: Jetevaluator[name] for name in jec_names})
+name_map['ptGenJet'] = 'pt_gen'
+name_map['ptRaw'] = 'pt_raw'
+name_map['massRaw'] = 'mass_raw'
+name_map['Rho'] = 'rho'
 
-JECuncertainties = JetCorrectionUncertainty(**{name:Jetevaluator[name] for name in junc_names})
-
-JER = JetResolution(**{name:Jetevaluator[name] for name in jer_names})
-JERsf = JetResolutionScaleFactor(**{name:Jetevaluator[name] for name in jersf_names})
-
-Jet_transformer = JetTransformer(jec=JECcorrector,junc=JECuncertainties, jer = JER, jersf = JERsf)
-"""
+jet_factory = CorrectedJetsFactory(name_map, jec_stack)
 
 
 # Look at ProcessorABC to see the expected methods and what they are supposed to do
@@ -141,7 +141,6 @@ class TTGammaProcessor(processor.ProcessorABC):
 
         dataset = events.metadata['dataset']
         datasetFull = dataset+'_2016'
-        #isData = 'Data' in dataset
         
         rho = events.fixedGridRhoFastjetAll
 
@@ -157,6 +156,7 @@ class TTGammaProcessor(processor.ProcessorABC):
             num = ak.to_numpy(ak.num(events.GenPart.pdgId))        
             maxParentFlatten = maxHistoryPDGID(idx,par,num)
             events["GenPart","maxParent"] = ak.unflatten(maxParentFlatten, num)
+
 
         #################
         # OVERLAP REMOVAL
@@ -331,41 +331,37 @@ class TTGammaProcessor(processor.ProcessorABC):
         #select loosePhoton, the subset of photons passing the photonSelect cut and all photonID cuts without the charged hadron isolation cut applied
         loosePhoton = events.Photon[photonSelect & photonID_NoChIso]
 
+        ####
+        #update jet kinematics based on jet energy corrections
+        events["Jet","pt_raw"]=(1 - events.Jet.rawFactor)*events.Jet.pt
+        events["Jet","mass_raw"]=(1 - events.Jet.rawFactor)*events.Jet.mass
+        events["Jet","pt_gen"]=ak.values_astype(ak.fill_none(events.Jet.matched_gen.pt, 0), np.float32)
+        events["Jet","rho"]= ak.broadcast_arrays(events.fixedGridRhoFastjetAll, events.Jet.pt)[0]
 
-        #ARH: ADD JET TRANSFORMER HERE!
-        """
-        #update jet kinematics based on jete energy systematic uncertainties
-        if self.isMC:
-        genJet = JaggedCandidateArray.candidatesfromcounts(
-                df['nGenJet'],
-                pt = df['GenJet_pt'],
-                eta = df['GenJet_eta'],
-                phi = df['GenJet_phi'],
-                mass = df['GenJet_mass'],
-            )
-            jets.genJetIdx[jets.genJetIdx>=events.GenJet.counts] = -1 #fixes a bug in events.GenJet indices, skimmed after events.GenJet matching
-            jets['ptGenJet'][jets.genJetIdx>-1] = events.GenJet[jets.genJetIdx[jets.genJetIdx>-1]].pt
-            jets['rho'] = jets.pt.ones_like()*rho
-            #adds additional columns to the jets array, containing the jet pt with JEC and JER variations
-            #    additional columns added to jets:  pt_jer_up,   mass_jer_up
-            #                                       pt_jer_down, mass_jer_down
-            #                                       pt_jes_up,   mass_jes_up
-            #                                       pt_jes_down, mass_jes_down
-            Jet_transformer.transform(jets)
-            # 4. ADD SYSTEMATICS
-            #   If processing a jet systematic (based on value of self.jetSyst variable) update the jet pt and mass to reflect the jet systematic uncertainty variations
-            #   Use the function updateJetP4(jets, pt=NEWPT, mass=NEWMASS) to update the pt and mass
-        """
+        events_cache = events.caches[0]
+        corrected_jets = jet_factory.build(events.Jet, lazy_cache=events_cache)
+
+        # 4. ADD SYSTEMATICS
+        #   If processing a jet systematic (based on value of self.jetSyst variable) update the jets to reflect the jet systematic uncertainty variations
+        jets = corrected_jets
+        if(self.jetSyst == 'JERUp'):
+            jets = corrected_jets.JER.up
+        elif(self.jetSyst == 'JERDown'):
+            jets = corrected_jets.JER.down
+        elif(self.jetSyst == 'JESUp'):
+            jets = corrected_jets.JES_jes.up
+        elif(self.jetSyst == 'JESDown'):
+            jets = corrected_jets.JES_jes.down
         
 
         ##check dR jet,lepton & jet,photon
-        jetMu, jetMuDR = events.Jet.nearest(tightMuon, return_metric=True)
+        jetMu, jetMuDR = jets.nearest(tightMuon, return_metric=True)
         jetMuMask = ak.fill_none(jetMuDR > 0.4, True)
 
-        jetEle, jetEleDR = events.Jet.nearest(tightElectron, return_metric=True)
+        jetEle, jetEleDR = jets.nearest(tightElectron, return_metric=True)
         jetEleMask = ak.fill_none(jetEleDR > 0.4, True)
 
-        jetPho, jetPhoDR = events.Jet.nearest(tightPhoton, return_metric=True)
+        jetPho, jetPhoDR = jets.nearest(tightPhoton, return_metric=True)
         jetPhoMask = ak.fill_none(jetPhoDR > 0.4, True)
 
         # 1. ADD SELECTION
@@ -374,15 +370,15 @@ class TTGammaProcessor(processor.ProcessorABC):
         ##medium jet ID cut
         jetIDbit = 1
 
-        jetSelectNoPt = ((abs(events.Jet.eta) < 2.4) &
-                         ((events.Jet.jetId >> jetIDbit & 1)==1) &
+        jetSelectNoPt = ((abs(jets.eta) < 2.4) &
+                         ((jets.jetId >> jetIDbit & 1)==1) &
                          jetMuMask & jetEleMask & jetPhoMask )
         
-        jetSelect = jetSelectNoPt & (events.Jet.pt > 30)
+        jetSelect = jetSelectNoPt & (jets.pt > 30)
 
         # 1. ADD SELECTION
         #select the subset of jets passing the jetSelect cuts
-        tightJet = events.Jet[jetSelect]
+        tightJet = jets[jetSelect]
 
         # 1. ADD SELECTION
         # select the subset of tightJet which pass the Deep CSV tagger
@@ -696,7 +692,6 @@ class TTGammaProcessor(processor.ProcessorABC):
 #        systList = ['noweight','nominal']
 
         systList = ['nominal','muEffWeightUp','muEffWeightDown','eleEffWeightUp','eleEffWeightDown','ISRUp', 'ISRDown', 'FSRUp', 'FSRDown', 'PDFUp', 'PDFDown', 'Q2ScaleUp', 'Q2ScaleDown','puWeightUp','puWeightDown','btagWeightUp','btagWeightDown']
-        #ARH: Missing: PU, btag
 
         # PART 4: SYSTEMATICS
         # uncomment the full list after systematics have been implemented        
