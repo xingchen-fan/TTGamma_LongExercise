@@ -8,7 +8,8 @@ python -m venv --copies $NAME
 source $NAME/bin/activate
 export PATH=$PATH:$PWD/scripts
 python -m pip install setuptools pip --upgrade
-python -m pip install 'coffea==0.7.0rc1'
+#Use master branch of coffea to include jec patch
+python -m pip install git+https://github.com/CoffeaTeam/coffea.git@master
 python -m pip install xxhash
 
 sed -i '40s/.*/VIRTUAL_ENV="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}" )")" \&\& pwd)"/' $NAME/bin/activate
