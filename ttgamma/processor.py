@@ -16,7 +16,6 @@ import re
 
 from .utils.crossSections import *
 from .utils.genParentage import maxHistoryPDGID
-from .utils.updateJets import updateJetP4
 
 import os.path
 cwd = os.path.dirname(__file__)
@@ -333,27 +332,28 @@ class TTGammaProcessor(processor.ProcessorABC):
 
         ####
         #update jet kinematics based on jet energy corrections
-        events["Jet","pt_raw"]=(1 - events.Jet.rawFactor)*events.Jet.pt
-        events["Jet","mass_raw"]=(1 - events.Jet.rawFactor)*events.Jet.mass
-        events["Jet","pt_gen"]=ak.values_astype(ak.fill_none(events.Jet.matched_gen.pt, 0), np.float32)
-        events["Jet","rho"]= ak.broadcast_arrays(events.fixedGridRhoFastjetAll, events.Jet.pt)[0]
+        jets = events.Jet
+        if self.isMC:
+            events["Jet","pt_raw"]=(1 - events.Jet.rawFactor)*events.Jet.pt
+            events["Jet","mass_raw"]=(1 - events.Jet.rawFactor)*events.Jet.mass
+            events["Jet","pt_gen"]=ak.values_astype(ak.fill_none(events.Jet.matched_gen.pt, 0), np.float32)
+            events["Jet","rho"]= ak.broadcast_arrays(events.fixedGridRhoFastjetAll, events.Jet.pt)[0]
 
-        events_cache = events.caches[0]
-        corrected_jets = jet_factory.build(events.Jet, lazy_cache=events_cache)
+            events_cache = events.caches[0]
+            corrected_jets = jet_factory.build(events.Jet, lazy_cache=events_cache)
 
-        # 4. ADD SYSTEMATICS
-        #   If processing a jet systematic (based on value of self.jetSyst variable) update the jets to reflect the jet systematic uncertainty variations
-        jets = corrected_jets
-        if(self.jetSyst == 'JERUp'):
-            jets = corrected_jets.JER.up
-        elif(self.jetSyst == 'JERDown'):
-            jets = corrected_jets.JER.down
-        elif(self.jetSyst == 'JESUp'):
-            jets = corrected_jets.JES_jes.up
-        elif(self.jetSyst == 'JESDown'):
-            jets = corrected_jets.JES_jes.down
+            # 4. ADD SYSTEMATICS
+            #   If processing a jet systematic (based on value of self.jetSyst variable) update the jets to reflect the jet systematic uncertainty variations
+            jets = corrected_jets
+            if(self.jetSyst == 'JERUp'):
+                jets = corrected_jets.JER.up
+            elif(self.jetSyst == 'JERDown'):
+                jets = corrected_jets.JER.down
+            elif(self.jetSyst == 'JESUp'):
+                jets = corrected_jets.JES_jes.up
+            elif(self.jetSyst == 'JESDown'):
+                jets = corrected_jets.JES_jes.down
         
-
         ##check dR jet,lepton & jet,photon
         jetMu, jetMuDR = jets.nearest(tightMuon, return_metric=True)
         jetMuMask = ak.fill_none(jetMuDR > 0.4, True)

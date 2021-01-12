@@ -9,8 +9,6 @@ source $NAME/bin/activate
 python -m pip install setuptools pip --upgrade
 #Use master branch of coffea to include jec patch
 python -m pip install git+https://github.com/CoffeaTeam/coffea.git@master
-#Won't be needed after PR414 is merged:
-python -m pip install awkward1
 python -m pip install xxhash
 
 sed -i '40s/.*/VIRTUAL_ENV="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}" )")" \&\& pwd)"/' $NAME/bin/activate
