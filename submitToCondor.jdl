@@ -11,7 +11,7 @@ Output = condorOutputs/coffeaOutput_$(cluster)_$(process).stdout
 Error  = condorOutputs/coffeaOutput_$(cluster)_$(process).stderr
 Log    = condorOutputs/coffeaOutput_$(cluster)_$(process).condor
 
-request_cpus = 4
+request_cpus = 1
 request_memory = 8000
 
 Arguments = "Data"
