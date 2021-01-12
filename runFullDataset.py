@@ -57,10 +57,10 @@ else:
 
     # Define mapping for running on condor
     mc_group_mapping = {
-        "MCTTGamma": ["TTGamma"], 
+        "MCTTGamma": ["TTGamma_Dilepton", "TTGamma_Hadronic", "TTGamma_SingleLept"], 
         "MCTTbar1l": ["TTbarPowheg_Semilept", "TTbarPowheg_Hadronic"],
         "MCTTbar2l": ["TTbarPowheg_Dilepton"],
-        "MCSingletop": [key for key in fileset if "ST" in key],
+        "MCSingleTop": [key for key in fileset if "ST" in key],
         "MCZJets": [key for key in fileset if "DY" in key],
         "MCWJets": [key for key in fileset if "W1" in key or "W2" in key or "W3" in key or "W4" in key],
     }
