@@ -70,31 +70,6 @@ else:
     mc_group_mapping["MCOther"] = [key for key in fileset if (not key in mc_nonother) and (not "Data" in key)]
     job_fileset = {key: fileset[key] for key in mc_group_mapping[args.mcGroup]}
 
-    '''
-    if 'TTGamma' in args.mcGroup:
-        job_fileset = {k: fileset[k] for k in fileset if 'TTGamma' in k}
-        mcType = 'MCTTGamma'
-    elif 'TTbar1l' in args.mcGroup:
-        job_fileset = {'TTbarPowheg_Semilept': fileset['TTbarPowheg_Semilept'],
-                   'TTbarPowheg_Hadronic': fileset['TTbarPowheg_Hadronic']}
-        mcType = 'MCTTbar1l'
-    elif 'TTbar2l' in args.mcGroup:
-        job_fileset = {'TTbarPowheg_Dilepton': fileset['TTbarPowheg_Dilepton']}
-        mcType = 'MCTTbar2l'
-    elif 'SingleTop' in args.mcGroup:
-        job_fileset = {k: fileset[k] for k in fileset if ('ST' in k)}
-        mcType = 'MCSingletop'
-    elif 'ZJets' in args.mcGroup:
-        job_fileset = {k: fileset[k] for k in fileset if ('DY' in k)}
-        mcType = 'MCZJets'
-    elif 'WJets' in args.mcGroup:
-        job_fileset = {k: fileset[k] for k in fileset if ('W1' in k or 'W2' in k or 'W3' in k or 'W4' in k)}
-        mcType = 'MCWJets'
-    else:
-        job_fileset = {k: fileset[k] for k in fileset if not ('TTGamma' in k or 'TTbar' in k or 'DY' in k or 'ST' in k or 'W1' in k or 'W2' in k or 'W3' in k or 'W4' in k or 'Data' in k)}
-        mcType = 'MCOther'
-    '''
-
     pprint(job_fileset)
 
     output = processor.run_uproot_job(job_fileset,
