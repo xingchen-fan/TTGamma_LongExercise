@@ -580,10 +580,6 @@ class TTGammaProcessor(processor.ProcessorABC):
 
             #weights.add('lumiWeight',lumiWeight)
             datasetFull = dataset+'_2016' # Name for pileup lookup includes the year
-            if dataset == "WGamma":
-                datasetFull = "WGamma_01J_5f_2016"
-            elif dataset == "ZGamma":
-                datasetFull = "ZGamma_01J_5f_lowMass_2016"
             if not datasetFull in puLookup:
                 print("WARNING : Using TTGamma_SingleLept_2016 pileup distribution instead of {}".format(datasetFull))
                 datasetFull = "TTGamma_SingleLept_2016"
