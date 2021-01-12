@@ -138,7 +138,7 @@ class TTGammaProcessor(processor.ProcessorABC):
         output['EventCount'] = len(events)
 
         datasetFull = events.metadata['dataset']
-        dataset=datasetFull.replace('_2016','')
+        dataset = datasetFull.replace('_2016','')
         #isData = 'Data' in dataset
         
         rho = events.fixedGridRhoFastjetAll
@@ -748,7 +748,7 @@ class TTGammaProcessor(processor.ProcessorABC):
         # PART 4: SYSTEMATICS
         # uncomment the full list after systematics have been implemented        
         #systList = ['noweight','nominal','puWeightUp','puWeightDown','muEffWeightUp','muEffWeightDown','eleEffWeightUp','eleEffWeightDown','btagWeight_lightUp','btagWeight_lightDown','btagWeight_heavyUp','btagWeight_heavyDown', 'ISRUp', 'ISRDown', 'FSRUp', 'FSRDown', 'PDFUp', 'PDFDown', 'Q2ScaleUp', 'Q2ScaleDown']
-
+        
         if not self.jetSyst=='nominal':
             systList=[self.jetSyst]
 
