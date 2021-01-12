@@ -1,4 +1,5 @@
 import uproot
+uproot.open.defaults["xrootd_handler"] = uproot.source.xrootd.MultithreadedXRootDSource
 from coffea import util, processor, hist
 from coffea.nanoevents import NanoEventsFactory, NanoAODSchema
 from ttgamma import TTGammaProcessor
@@ -11,13 +12,12 @@ import time
 import sys
 from pprint import pprint
 
-uproot.open.defaults["xrootd_handler"] = uproot.source.xrootd.MultithreadedXRootDSource
-
 import argparse
 parser = argparse.ArgumentParser(description="Batch processing script for ttgamma analysis")
 parser.add_argument("mcGroup", type=str, help="Name of process to run (Data, MCTTGamma, MCTTbar1l, MCTTbar2l, MCSingleTop, MCZJets, MCWJets, MCOther)")
 parser.add_argument("--chunksize", type=int, default=100000, help="Chunk size")
 parser.add_argument("--maxchunks", type=int, default=None, help="Max chunks")
+parser.add_argument("--workers", type=int, default=1, help="Number of workers")
 parser.add_argument("--condor", action="store_true", help="Flag for running on condor (disables progress bar)")
 args = parser.parse_args()
 
@@ -33,7 +33,7 @@ if args.mcGroup == "Data":
                                       treename           = 'Events',
                                       processor_instance = TTGammaProcessor(isMC=False),
                                       executor           = processor.futures_executor,
-                                      executor_args      = {'schema': NanoAODSchema, 'workers': 4, 'status': not args.condor},#{'workers': 4, 'flatten': True},
+                                      executor_args      = {'schema': NanoAODSchema, 'workers': args.workers, 'status': not args.condor},#{'workers': 4, 'flatten': True},
                                       chunksize          = args.chunksize,
                                       maxchunks          = args.maxchunks
                                   )
@@ -101,7 +101,7 @@ else:
                                       treename           = 'Events',
                                       processor_instance = TTGammaProcessor(isMC=True),
                                       executor           = processor.futures_executor, #processor.futures_executor,
-                                      executor_args      = {'schema': NanoAODSchema, 'workers': 4, 'status': not args.condor},#{'workers': 4, 'flatten': True},
+                                      executor_args      = {'schema': NanoAODSchema, 'workers': args.workers, 'status': not args.condor},#{'workers': 4, 'flatten': True},
                                       chunksize          = args.chunksize,
                                       maxchunks          = args.maxchunks
                                   )
