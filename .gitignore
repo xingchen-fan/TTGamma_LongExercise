@@ -1,8 +1,5 @@
 *.pyc
-.ipynb_checkpoints
 __pycache__
-.eggs
-*.egg-info
-build
-dist
+.*
 *~
+shell
