@@ -6,8 +6,10 @@ from coffea.nanoevents.methods import nanoaod
 from coffea.nanoevents import NanoEventsFactory, NanoAODSchema
 from coffea.lookup_tools import extractor, dense_lookup
 from coffea.btag_tools import BTagScaleFactor
-from coffea.analysis_tools import PackedSelection
+from coffea.analysis_tools import Weights, PackedSelection
 from coffea.jetmet_tools import CorrectedJetsFactory, JECStack
+
+NanoAODSchema.warn_missing_crossrefs = False
 
 import awkward as ak
 import numpy as np
@@ -137,7 +139,7 @@ class TTGammaProcessor(processor.ProcessorABC):
 
     def process(self, events):
         output = self.accumulator.identity()
-        output['EventCount'] = len(events)
+        output['EventCount'] += len(events)
 
         dataset = events.metadata['dataset']
 
@@ -576,7 +578,7 @@ class TTGammaProcessor(processor.ProcessorABC):
         ################
 
         #create a processor Weights object, with the same length as the number of events in the chunk
-        weights = processor.Weights(len(events))
+        weights = Weights(len(events))
 
         if self.isMC:
             ## Note:Lumi weighting is done in postprocessing in our workflow
