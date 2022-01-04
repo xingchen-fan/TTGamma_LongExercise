@@ -10,7 +10,7 @@ from ttgamma.utils.crossSections import lumis, crossSections
 
 import time
 import sys
-from pprint import pprint
+import os
 
 import argparse
 
@@ -53,6 +53,7 @@ if __name__ == "__main__":
     parser.add_argument("--chunksize", type=int, default=100000, help="Chunk size")
     parser.add_argument("--maxchunks", type=int, default=None, help="Max chunks")
     parser.add_argument("--workers", type=int, default=1, help="Number of workers")
+    parser.add_argument("--outdir", type=str, default="Outputs", help="Where to put the output files")
     parser.add_argument(
         "--batch", action="store_true", help="Batch mode (no progress bar)"
     )
@@ -64,6 +65,9 @@ if __name__ == "__main__":
         help="How to run the processing",
     )
     args = parser.parse_args()
+
+    if not os.path.exists(args.outdir):
+        os.makedirs(args.outdir)
 
     tstart = time.time()
 
@@ -104,9 +108,6 @@ if __name__ == "__main__":
         )
     else:
         job_fileset = {key: fileset[key] for key in mc_group_mapping[args.mcGroup]}
-
-        pprint(job_fileset)
-
         output = runner(
             job_fileset,
             treename="Events",
@@ -139,5 +140,6 @@ if __name__ == "__main__":
     print("Total rate: %.1f events / second" % (output["EventCount"].value / elapsed))
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    util.save(output, f"output_{args.mcGroup}_run{timestamp}.coffea")
-    print(f"Saved output to output_{args.mcGroup}_run{timestamp}.coffea")
+    outfile = os.path.join(args.outdir, f"output_{args.mcGroup}_run{timestamp}.coffea")
+    util.save(output, outfile)
+    print(f"Saved output to {outfile}")
