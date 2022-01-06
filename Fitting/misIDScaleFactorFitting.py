@@ -1,8 +1,20 @@
+#!/usr/bin/env python3
+"""
+First source LCG environment to get ROOT:
+source /cvmfs/sft.cern.ch/lcg/views/LCG_101/x86_64-centos7-gcc11-opt/setup.sh
+"""
 from ROOT import TFile, TFractionFitter, TObjArray
 
 import pprint
 
 _file = TFile("../RootFiles/MisID_Output_electron.root")
+
+def getSafe(name):
+    h = _file.Get(name)
+    if h == None:
+        print(h)
+        raise KeyError(name)
+    return h
 
 
 systematics  = ["nominal",
@@ -32,14 +44,14 @@ systematics  = ["nominal",
 
 results = {}
 
-data = _file.Get("dataObs")
+data = getSafe("dataObs")
     
 for syst in systematics:
 
-    misID = _file.Get(f"MisIDele_{syst}")
-    otherMC = _file.Get(f"Other_{syst}")
-    otherMC.Add(_file.Get(f"WGamma_{syst}"))
-    otherMC.Add(_file.Get(f"ZGamma_{syst}"))
+    misID = getSafe(f"MisIDele_{syst}")
+    otherMC = getSafe(f"Other_{syst}")
+    otherMC.Add(getSafe(f"WGamma_{syst}"))
+    otherMC.Add(getSafe(f"ZGamma_{syst}"))
 
 
     mc = TObjArray(2)

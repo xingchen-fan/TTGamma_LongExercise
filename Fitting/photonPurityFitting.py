@@ -1,8 +1,20 @@
+#!/usr/bin/env python3
+"""
+First source LCG environment to get ROOT:
+source /cvmfs/sft.cern.ch/lcg/views/LCG_101/x86_64-centos7-gcc11-opt/setup.sh
+"""
 from ROOT import TFile, TFractionFitter, TObjArray
 
 import pprint
 
 _file = TFile("../RootFiles/Isolation_Output.root")
+
+def getSafe(name):
+    h = _file.Get(name)
+    if h == None:
+        print(h)
+        raise KeyError(name)
+    return h
 
 
 systematics  = ["nominal",
@@ -32,13 +44,13 @@ systematics  = ["nominal",
 
 results = {}
 
-data = _file.Get("dataObs")
+data = getSafe("dataObs")
     
 for syst in systematics:
 
     mc = TObjArray(2)
-    mc.Add(_file.Get(f"Isolated_{syst}"))
-    mc.Add(_file.Get(f"NonPrompt_{syst}"))
+    mc.Add(getSafe(f"Isolated_{syst}"))
+    mc.Add(getSafe(f"NonPrompt_{syst}"))
 
     fit = TFractionFitter(data, mc,"q")
     
