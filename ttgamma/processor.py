@@ -1,13 +1,10 @@
 import time
 
-from coffea import hist, util
+from coffea import hist
 import coffea.processor as processor
 from coffea.nanoevents.methods import nanoaod
 from coffea.nanoevents import NanoEventsFactory, NanoAODSchema
-from coffea.lookup_tools import extractor, dense_lookup
-from coffea.btag_tools import BTagScaleFactor
 from coffea.analysis_tools import Weights, PackedSelection
-from coffea.jetmet_tools import CorrectedJetsFactory, JECStack
 
 NanoAODSchema.warn_missing_crossrefs = False
 
@@ -16,48 +13,43 @@ import numpy as np
 import pickle
 import re
 
-from .utils.crossSections import *
+from .utils.crossSections import lumis, crossSections
 from .utils.genParentage import maxHistoryPDGID
+from .scalefactors import (
+    taggingEffLookup, bJetScales, puLookup, puLookup_Up, puLookup_Down, jet_factory,
+    ele_id_sf, ele_id_err, ele_reco_sf, ele_reco_err, mu_id_sf, mu_id_err, mu_iso_sf, mu_iso_err, mu_trig_sf, mu_trig_err 
+)
 
-import os.path
-cwd = os.path.dirname(__file__)
 
-taggingEffLookup = util.load(f'{cwd}/utils/taggingEfficienciesDenseLookup.coffea')
+def categorizeGenPhoton(photon):
+    """A helper function to categorize MC reconstructed photons
+    
+    Returns an integer array to label them as either a generated true photon (1),
+    a mis-identified generated electron (2), a photon from a hadron decay (3),
+    or a fake (e.g. from pileup) (4).
+    """
+    #### Photon categories, using pdgID of the matched gen particle for the leading photon in the event
+    # reco photons matched to a generated photon
+    matchedPho = ak.any(photon.matched_gen.pdgId==22, axis=-1)
+    # reco photons really generated as electrons
+    matchedEle =  ak.any(abs(photon.matched_gen.pdgId)==11, axis=-1)
+    # if the gen photon has a PDG ID > 25 in its history, it has a hadronic parent
+    hadronicParent = ak.any(photon.matched_gen.maxParent>25, axis=-1)
+    
+    #####
+    # 2. DEFINE VARIABLES
+    # define the photon categories for tight photon events
+    # a genuine photon is a reconstructed photon which is matched to a generator level photon, and does not have a hadronic parent
+    isGenPho = matchedPho & ~hadronicParent
+    # a hadronic photon is a reconstructed photon which is matched to a generator level photon, but has a hadronic parent
+    isHadPho = matchedPho & hadronicParent
+    # a misidentified electron is a reconstructed photon which is matched to a generator level electron
+    isMisIDele = matchedEle
+    # a hadronic/fake photon is a reconstructed photon that does not fall within any of the above categories and has at least one photon
+    isHadFake = ~(isMisIDele | isGenPho | isHadPho) & (ak.num(photon)==1)
 
-bJetScales = BTagScaleFactor(f"{cwd}/ScaleFactors/Btag/DeepCSV_2016LegacySF_V1.btag.csv","MEDIUM")
-
-puLookup = util.load(f'{cwd}/ScaleFactors/puLookup.coffea')
-puLookup_Down = util.load(f'{cwd}/ScaleFactors/puLookup_Down.coffea')
-puLookup_Up = util.load(f'{cwd}/ScaleFactors/puLookup_Up.coffea')
-
-Jetext = extractor()
-Jetext.add_weight_sets([
-        f"* * {cwd}/ScaleFactors/JEC/Summer16_07Aug2017_V11_MC_L1FastJet_AK4PFchs.jec.txt",
-        f"* * {cwd}/ScaleFactors/JEC/Summer16_07Aug2017_V11_MC_L2Relative_AK4PFchs.jec.txt",
-        f"* * {cwd}/ScaleFactors/JEC/Summer16_07Aug2017_V11_MC_Uncertainty_AK4PFchs.junc.txt",
-        f"* * {cwd}/ScaleFactors/JEC/Summer16_25nsV1_MC_PtResolution_AK4PFchs.jr.txt",
-        f"* * {cwd}/ScaleFactors/JEC/Summer16_25nsV1_MC_SF_AK4PFchs.jersf.txt",
-        ])
-Jetext.finalize()
-Jetevaluator = Jetext.make_evaluator()
-
-jec_names = ['Summer16_07Aug2017_V11_MC_L1FastJet_AK4PFchs','Summer16_07Aug2017_V11_MC_L2Relative_AK4PFchs', 'Summer16_07Aug2017_V11_MC_Uncertainty_AK4PFchs', 'Summer16_25nsV1_MC_PtResolution_AK4PFchs', 'Summer16_25nsV1_MC_SF_AK4PFchs']
-
-jec_inputs = {name: Jetevaluator[name] for name in jec_names}
-jec_stack = JECStack(jec_inputs)
-
-name_map = jec_stack.blank_name_map
-name_map['JetPt'] = 'pt'
-name_map['JetMass'] = 'mass'
-name_map['JetEta'] = 'eta'
-name_map['JetA'] = 'area'
-
-name_map['ptGenJet'] = 'pt_gen'
-name_map['ptRaw'] = 'pt_raw'
-name_map['massRaw'] = 'mass_raw'
-name_map['Rho'] = 'rho'
-
-jet_factory = CorrectedJetsFactory(name_map, jec_stack)
+    # integer definition for the photon category axis 
+    return 1*isGenPho + 2*isMisIDele + 3*isHadPho + 4*isHadFake
 
 
 # Look at ProcessorABC to see the expected methods and what they are supposed to do
@@ -116,22 +108,6 @@ class TTGammaProcessor(processor.ProcessorABC):
             'EventCount'             : processor.value_accumulator(int),
         })
 
-        self.ele_id_sf = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/ele_id_sf.coffea')
-        self.ele_id_err = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/ele_id_err.coffea')
-
-        self.ele_reco_sf = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/ele_reco_sf.coffea')
-        self.ele_reco_err = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/ele_reco_err.coffea')
-
-
-        self.mu_id_sf = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/mu_id_sf.coffea')
-        self.mu_id_err = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/mu_id_err.coffea')
-
-        self.mu_iso_sf = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/mu_iso_sf.coffea')
-        self.mu_iso_err = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/mu_iso_err.coffea')
-
-        self.mu_trig_sf = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/mu_trig_sf.coffea')
-        self.mu_trig_err = util.load(f'{cwd}/ScaleFactors/MuEGammaScaleFactors/mu_trig_err.coffea')
-        
 
     @property
     def accumulator(self):
@@ -221,7 +197,7 @@ class TTGammaProcessor(processor.ProcessorABC):
             passOverlapRemoval = ~isOverlap
 
         else:
-            passOverlapRemoval = np.ones_like(len(events))==1
+            passOverlapRemoval = True
             
         
         ##################
@@ -457,11 +433,8 @@ class TTGammaProcessor(processor.ProcessorABC):
         #create a selection object
         selection = PackedSelection()
 
-        selection.add('eleSel',electron_eventSelection)
-        selection.add('muSel',muon_eventSelection)
-
-#        selection.add('eleSel',ak.to_numpy(electron_eventSelection))
-#        selection.add('muSel',ak.to_numpy(muon_eventSelection))
+        selection.add('eleSel', electron_eventSelection)
+        selection.add('muSel', muon_eventSelection)
 
         #add two jet selection criteria
         #   First, 'jetSel' which selects events with at least 4 tightJet and at least one bTaggedJet
@@ -517,62 +490,16 @@ class TTGammaProcessor(processor.ProcessorABC):
             mugammaMass = (mugammaPairs.pho + mugammaPairs.mu).mass
 
         ###################
-        # PHOTON CATEGORIES
+        # PHOTON CATEGORIES (Part 2B)
         ###################
 
-        # Define photon category for each event
-
-        phoCategory = np.ones(len(events))
-        phoCategoryLoose = np.ones(len(events))
-
-        # PART 2B: Uncomment to begin implementing photon categorization
         if self.isMC:
-            #### Photon categories, using pdgID of the matched gen particle for the leading photon in the event
-            # reco photons matched to a generated photon
-            matchedPho = ak.any(leadingPhoton.matched_gen.pdgId==22, axis=-1)
-            # reco photons really generated as electrons
-            matchedEle =  ak.any(abs(leadingPhoton.matched_gen.pdgId)==11, axis=-1)
-            # if the gen photon has a PDG ID > 25 in its history, it has a hadronic parent
-            hadronicParent = ak.any(leadingPhoton.matched_gen.maxParent>25, axis=-1)
-            
-            #####
-            # 2. DEFINE VARIABLES
-            # define the photon categories for tight photon events
-            # a genuine photon is a reconstructed photon which is matched to a generator level photon, and does not have a hadronic parent
-            isGenPho = matchedPho & ~hadronicParent
-            # a hadronic photon is a reconstructed photon which is matched to a generator level photon, but has a hadronic parent
-            isHadPho = matchedPho & hadronicParent
-            # a misidentified electron is a reconstructed photon which is matched to a generator level electron
-            isMisIDele = matchedEle
-            # a hadronic/fake photon is a reconstructed photon that does not fall within any of the above categories and has at least one photon
-            isHadFake = ~(isMisIDele | isGenPho | isHadPho) & (ak.num(leadingPhoton)==1)
+            phoCategory = categorizeGenPhoton(leadingPhoton)
+            phoCategoryLoose = categorizeGenPhoton(leadingPhotonLoose)
+        else:
+            phoCategory = np.ones(len(events))
+            phoCategoryLoose = np.ones(len(events))
 
-            #define integer definition for the photon category axis 
-            phoCategory = 1*isGenPho + 2*isMisIDele + 3*isHadPho + 4*isHadFake
-
-        
-            # do photon matching for loose photons as well
-            # reco photons matched to a generated photon 
-            matchedPhoLoose = ak.any(leadingPhotonLoose.matched_gen.pdgId==22, axis=-1)
-            # reco photons really generated as electrons 
-            matchedEleLoose =  ak.any(abs(leadingPhotonLoose.matched_gen.pdgId)==11, axis=-1)
-            # if the gen photon has a PDG ID > 25 in it's history, it has a hadronic parent
-            hadronicParentLoose = ak.any(leadingPhotonLoose.matched_gen.maxParent>25, axis=-1)
-
-            #####
-            # 2. DEFINE VARIABLES
-            # a genuine photon is a reconstructed photon which is matched to a generator level photon, and does not have a hadronic parent
-            isGenPhoLoose = matchedPhoLoose & ~hadronicParentLoose
-            # a hadronic photon is a reconstructed photon which is matched to a generator level photon, but has a hadronic parent
-            isHadPhoLoose = matchedPhoLoose & hadronicParentLoose
-            # a misidentified electron is a reconstructed photon which is matched to a generator level electron
-            isMisIDeleLoose = matchedEleLoose
-            # a hadronic/fake photon is a reconstructed photon that does not fall within any of the above categories and has at least one loose photon
-            isHadFakeLoose = ~(isMisIDeleLoose | isGenPhoLoose | isHadPhoLoose) & (ak.num(leadingPhotonLoose)==1)        
-
-            #define integer definition for the photon category axis
-            phoCategoryLoose = 1*isGenPhoLoose + 2*isMisIDeleLoose + 3*isHadPhoLoose + 4*isHadFakeLoose
-        
         ################
         # EVENT WEIGHTS
         ################
@@ -638,10 +565,10 @@ class TTGammaProcessor(processor.ProcessorABC):
   
             weights.add('btagWeight',weight=btagWeight, weightUp=btagWeight_up, weightDown=btagWeight_down)
 
-            eleID = self.ele_id_sf(tightElectron.eta, tightElectron.pt)
-            eleIDerr = self.ele_id_err(tightElectron.eta, tightElectron.pt)
-            eleRECO = self.ele_reco_sf(tightElectron.eta, tightElectron.pt)
-            eleRECOerr = self.ele_reco_err(tightElectron.eta, tightElectron.pt)
+            eleID = ele_id_sf(tightElectron.eta, tightElectron.pt)
+            eleIDerr = ele_id_err(tightElectron.eta, tightElectron.pt)
+            eleRECO = ele_reco_sf(tightElectron.eta, tightElectron.pt)
+            eleRECOerr = ele_reco_err(tightElectron.eta, tightElectron.pt)
             
             eleSF = ak.prod((eleID*eleRECO), axis=-1)
             eleSF_up   = ak.prod(((eleID + eleIDerr) * (eleRECO + eleRECOerr)), axis=-1)
@@ -652,12 +579,12 @@ class TTGammaProcessor(processor.ProcessorABC):
             weights.add('eleEffWeight',weight=eleSF,weightUp=eleSF_up,weightDown=eleSF_down)
 
         
-            muID = self.mu_id_sf(tightMuon.eta, tightMuon.pt)
-            muIDerr = self.mu_id_err(tightMuon.eta, tightMuon.pt)
-            muIso = self.mu_iso_sf(tightMuon.eta, tightMuon.pt)
-            muIsoerr = self.mu_iso_err(tightMuon.eta, tightMuon.pt)
-            muTrig = self.mu_iso_sf(abs(tightMuon.eta), tightMuon.pt)
-            muTrigerr = self.mu_iso_err(abs(tightMuon.eta), tightMuon.pt)
+            muID = mu_id_sf(tightMuon.eta, tightMuon.pt)
+            muIDerr = mu_id_err(tightMuon.eta, tightMuon.pt)
+            muIso = mu_iso_sf(tightMuon.eta, tightMuon.pt)
+            muIsoerr = mu_iso_err(tightMuon.eta, tightMuon.pt)
+            muTrig = mu_iso_sf(abs(tightMuon.eta), tightMuon.pt)
+            muTrigerr = mu_iso_err(abs(tightMuon.eta), tightMuon.pt)
             
             muSF = ak.prod((muID*muIso*muTrig), axis=-1)
             muSF_up   = ak.prod(((muID + muIDerr) * (muIso + muIsoerr) * (muTrig + muTrigerr)), axis=-1)
