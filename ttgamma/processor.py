@@ -174,11 +174,12 @@ def categorizeGenPhoton(photon):
     """
     #### Photon categories, using pdgID of the matched gen particle for the leading photon in the event
     # reco photons matched to a generated photon
-    matchedPho = photon.matched_gen.pdgId==22
+    # if matched_gen is None (i.e. no match), then we set the flag False
+    matchedPho = ak.fill_none(photon.matched_gen.pdgId==22, False)
     # reco photons really generated as electrons
-    matchedEle =  abs(photon.matched_gen.pdgId)==11
+    matchedEle =  ak.fill_none(abs(photon.matched_gen.pdgId)==11, False)
     # if the gen photon has a PDG ID > 25 in its history, it has a hadronic parent
-    hadronicParent = photon.matched_gen.maxParent>25
+    hadronicParent = ak.fill_none(photon.matched_gen.maxParent>25, False)
     
     # define the photon categories for tight photon events
     # a genuine photon is a reconstructed photon which is matched to a generator level photon, and does not have a hadronic parent
@@ -249,27 +250,7 @@ class TTGammaProcessor(processor.ProcessorABC):
         return self._accumulator
 
     def process(self, events):
-        if self.isMC:
-            output = self.accumulator.identity()
-            shift_systs = ["nominal", "JESUp", "JESDown", "JERUp", "JERDown"]
-            for _syst in shift_systs:
-                output += self.process_shift(events, _syst)
-        else:
-            # data doesn't need each systematic shift to be processed
-            output = self.process_shift(events, "nominal")
-
-        return output
-
-    def process_shift(self, events, shift_syst="nominal"):
-        output = self.accumulator.identity()
-        output['EventCount'] += len(events)
-
-        dataset = events.metadata['dataset']
-
-        #Fill temp hist for testing purposes 
-        # Feel free to comment this out and copy-paste it to later in the code to check histgrams 
-        # after each step (for example, after defining tightPhotons
-        output['all_photon_pt'].fill(dataset=dataset, pt=ak.flatten(events.Photon.pt))
+        ## Here we pre-compute a few common variables that we will re-use later and add them to the events object
 
         # Temporary patch so we can add photon and lepton four vectors. Not needed for newer versions of NanoAOD
         events["Photon","charge"] = 0
@@ -284,6 +265,30 @@ class TTGammaProcessor(processor.ProcessorABC):
             maxParentFlatten = maxHistoryPDGID(idx,par,num)
             events["GenPart","maxParent"] = ak.unflatten(maxParentFlatten, num)
 
+        if self.isMC:
+            output = self.accumulator.identity()
+            shift_systs = [None, "JESUp", "JESDown", "JERUp", "JERDown"]
+            for _syst in shift_systs:
+                output += self.process_shift(events, _syst)
+        else:
+            # data doesn't need each systematic shift to be processed
+            output = self.process_shift(events, "nominal")
+
+        # only add events up once
+        output['EventCount'] += len(events)
+        return output
+
+    def process_shift(self, events, shift_syst=None):
+        output = self.accumulator.identity()
+
+        dataset = events.metadata['dataset']
+
+        # Fill temp hist for testing purposes 
+        # Feel free to comment this out and copy-paste it to later in the code to check histgrams 
+        # after each step (for example, after defining tightPhotons
+        # Remember not to fill it if we are in a shift systematic though
+        if shift_syst is None:
+            output['all_photon_pt'].fill(dataset=dataset, pt=ak.flatten(events.Photon.pt))
 
         #################
         # OVERLAP REMOVAL
@@ -309,8 +314,8 @@ class TTGammaProcessor(processor.ProcessorABC):
         ##################
 
         # muon and electron selections are broken out into standalone functions
-        tightMuons, looseMuon = selectMuons(events)
-        tightElectron, looseElectron = selectElectrons(events)
+        tightMuons, looseMuons = selectMuons(events)
+        tightElectrons, looseElectrons = selectElectrons(events)
 
         ## Cross-cleaning:
 
@@ -323,12 +328,12 @@ class TTGammaProcessor(processor.ProcessorABC):
         
         # an alternate way to do this cross-cleaning is to find the
         # closest object and check it is far enough away
-        phoEle, phoEleDR = events.Photon.nearest(tightElectron, return_metric=True)
+        phoEle, phoEleDR = events.Photon.nearest(tightElectrons, return_metric=True)
         # we have to guard against the possibility there are no electrons here
         phoEleMask = ak.fill_none(phoEleDR > 0.4, True)
 
         # we select from only those photons that are already cross-cleaned against our tight leptons
-        tightPhoton, loosePhoton = selectPhotons(events.Photon[phoMuMask & phoEleMask])
+        tightPhotons, loosePhotons = selectPhotons(events.Photon[phoMuMask & phoEleMask])
 
         ## Jet objects
         # update jet kinematics based on jet energy corrections
@@ -358,9 +363,9 @@ class TTGammaProcessor(processor.ProcessorABC):
                 jets = corrected_jets
         
         ## More cross-cleaning: check jet does not overlap with our selected leptons or photons
-        jetMuMask = ak.any(jets.metric_table(tightMuons) > 0.4, -1)
-        jetEleMask = ak.any(jets.metric_table(tightElectron) > 0.4, -1)
-        jetPhoMask = ak.any(jets.metric_table(tightPhoton) > 0.4, -1)
+        jetMuMask = ak.all(jets.metric_table(tightMuons) > 0.4, axis=-1)
+        jetEleMask = ak.all(jets.metric_table(tightElectrons) > 0.4, axis=-1)
+        jetPhoMask = ak.all(jets.metric_table(tightPhotons) > 0.4, axis=-1)
 
         # 1. ADD SELECTION
         #select good jets
@@ -402,12 +407,12 @@ class TTGammaProcessor(processor.ProcessorABC):
         # zeroMuon should be true if there are no tight muons in the event
         selection.add("zeroMuon", ak.num(tightMuons) == 0)  # FIXME 1b
         # we also need to know if there are any loose muons in each event
-        selection.add("zeroLooseMuon", ak.num(looseMuon) == 0)  # FIXME 1b
+        selection.add("zeroLooseMuon", ak.num(looseMuons) == 0)  # FIXME 1b
         
         # similar selections will be needed for electrons
-        selection.add("oneEle", ak.num(tightElectron) == 1)  # FIXME 1b
-        selection.add("zeroEle", ak.num(tightElectron) == 0)  # FIXME 1b
-        selection.add("zeroLooseEle", ak.num(looseElectron) == 0)  # FIXME 1b
+        selection.add("oneEle", ak.num(tightElectrons) == 1)  # FIXME 1b
+        selection.add("zeroEle", ak.num(tightElectrons) == 0)  # FIXME 1b
+        selection.add("zeroLooseEle", ak.num(looseElectrons) == 0)  # FIXME 1b
 
         # our overall muon category is then those events that pass:
         muon_cat = {"muTrigger", "passGenOverlapRemoval", "oneMuon", "zeroLooseMuon", "zeroEle", "zeroLooseEle"}
@@ -417,21 +422,26 @@ class TTGammaProcessor(processor.ProcessorABC):
 
         selection.add('eleSel', selection.all(*ele_cat))
         selection.add('muSel', selection.all(*muon_cat))
-
         # add two jet selection criteria
         #   One which selects events with at least 4 tightJet and at least one b-tagged jet
-        selection.add('jetSel_4j1b',      (ak.num(tightJet) >= 4) & (ak.sum(tightJet.btagged) >= 1) ) 
+        selection.add('jetSel_4j1b',      (ak.num(tightJet) >= 4) & (ak.sum(tightJet.btagged, axis=-1) >= 1) ) 
         #   And another which selects events with at least 3 tightJet and exactly zero b-tagged jet
-        selection.add('jetSel_3j0b', (ak.num(tightJet) >= 3)     & (ak.sum(tightJet.btagged) == 0) )   # FIXME 1b
+        selection.add('jetSel_3j0b', (ak.num(tightJet) >= 3)     & (ak.sum(tightJet.btagged, axis=-1) == 0) )   # FIXME 1b
 
         # add selection for events with exactly 0 tight photons
-        selection.add('zeroPho', (ak.num(tightPhoton) == 0))  # FIXME 1b
+        selection.add('zeroPho', (ak.num(tightPhotons) == 0))  # FIXME 1b
 
         # add selection for events with exactly 1 tight photon
-        selection.add('onePho',  (ak.num(tightPhoton) == 1))  # FIXME 1b
+        selection.add('onePho',  (ak.num(tightPhotons) == 1))  # FIXME 1b
 
         # add selection for events with exactly 1 loose photon
-        selection.add('loosePho',(ak.num(loosePhoton) == 1))  # FIXME 1b
+        selection.add('loosePho',(ak.num(loosePhotons) == 1))  # FIXME 1b
+
+        # useful debugger for selection efficiency
+        if True and shift_syst is None:
+            print(dataset)
+            for n in selection.names:
+                print(f"- Cut {n} pass {selection.all(n).sum()} of {len(events)} events")
 
         ##################
         # EVENT VARIABLES
@@ -454,9 +464,9 @@ class TTGammaProcessor(processor.ProcessorABC):
         # this is because all of our signal and control regions require exactly zero or one of them
         # so there is no ambiguity to resolve
         leadingMuon = ak.firsts(tightMuons)
-        leadingElectron = ak.firsts(tightElectron)
-        leadingPhoton = ak.firsts(tightPhoton)
-        leadingPhotonLoose = ak.firsts(loosePhoton)
+        leadingElectron = ak.firsts(tightElectrons)
+        leadingPhoton = ak.firsts(tightPhotons)
+        leadingPhotonLoose = ak.firsts(loosePhotons)
 
         # define egammaMass, mass of leadingElectron and leadingPhoton system
         egammaMass = (leadingElectron + leadingPhoton).mass
@@ -530,10 +540,10 @@ class TTGammaProcessor(processor.ProcessorABC):
   
             weights.add('btagWeight',weight=btagWeight, weightUp=btagWeight_up, weightDown=btagWeight_down)
 
-            eleID = ele_id_sf(tightElectron.eta, tightElectron.pt)
-            eleIDerr = ele_id_err(tightElectron.eta, tightElectron.pt)
-            eleRECO = ele_reco_sf(tightElectron.eta, tightElectron.pt)
-            eleRECOerr = ele_reco_err(tightElectron.eta, tightElectron.pt)
+            eleID = ele_id_sf(tightElectrons.eta, tightElectrons.pt)
+            eleIDerr = ele_id_err(tightElectrons.eta, tightElectrons.pt)
+            eleRECO = ele_reco_sf(tightElectrons.eta, tightElectrons.pt)
+            eleRECOerr = ele_reco_err(tightElectrons.eta, tightElectrons.pt)
             
             eleSF = ak.prod((eleID*eleRECO), axis=-1)
             eleSF_up   = ak.prod(((eleID + eleIDerr) * (eleRECO + eleRECOerr)), axis=-1)
@@ -597,10 +607,9 @@ class TTGammaProcessor(processor.ProcessorABC):
         # FILL HISTOGRAMS
         ###################
 
-        # PART 4: SYSTEMATICS
         systList = []
         if self.isMC:
-            if shift_syst == 'nominal':
+            if shift_syst is None:
                 systList = ['nominal','muEffWeightUp','muEffWeightDown','eleEffWeightUp','eleEffWeightDown','ISRUp', 'ISRDown', 'FSRUp', 'FSRDown', 'PDFUp', 'PDFDown', 'Q2ScaleUp', 'Q2ScaleDown','puWeightUp','puWeightDown','btagWeightUp','btagWeightDown']
             else:
                 # if we are currently processing a shift systematic, we don't need to process any of the weight systematics
@@ -631,67 +640,66 @@ class TTGammaProcessor(processor.ProcessorABC):
                 elif lepton=='muon':
                     lepSel='muSel'
 
-                # 3. GET HISTOGRAM EVENT SELECTION
-                #  use the selection.all() method to select events passing 
-                #  the lepton selection, 4-jet 1-tag jet selection, and either the one-photon or loose-photon selections
+                # use the selection.all() method to select events passing 
+                # the lepton selection, 4-jet 1-tag jet selection, and either the one-photon or loose-photon selections
                 phosel = selection.all(lepSel, "jetSel_4j1b", 'onePho')
-                phoselLoose = selection.all(lepSel, "jetSel_4j1b", 'loosePho')
+                phoselLoose = selection.all(lepSel, "jetSel_4j1b", 'loosePho')  # FIXME 3
 
-                # 3. FILL HISTOGRAMS
-                #    fill photon_pt and photon_eta, using the tightPhotons array, from events passing the phosel selection
-                #    Note that pt and eta will need to be flattened with ak.flatten(), but evtWeight and phoCategory do not
-                #    Make sure to apply the correct mask to the category, weight, and photon pt or eta
+                # fill photon_pt and photon_eta, using the leadingPhoton array, from events passing the phosel selection
+                # Make sure to apply the correct mask to the category, weight, and photon pt or eta
+                # Although some elements of leadingPhoton or phoCategory may be 'None' for events without a good photon,
+                # in principle there should be no None elements after selection since the leadingPhoton should always be defined when phosel is True
+                # Because of this, we have to use np.asarray(...) since coffea.hist can only accept numpy-compatible arrays
 
                 output['photon_pt'].fill(dataset=dataset,
-                                         pt=leadingPhoton.pt[phosel],
-                                         category=phoCategory[phosel],
+                                         pt=np.asarray(leadingPhoton.pt[phosel]),
+                                         category=np.asarray(phoCategory[phosel]),
                                          lepFlavor=lepton,
                                          systematic=syst,
                                          weight=evtWeight[phosel])
     
                 output['photon_eta'].fill(dataset=dataset,
-                                          eta=leadingPhoton.eta[phosel],
-                                          category=phoCategory[phosel],
+                                          eta=np.asarray(leadingPhoton.eta[phosel]),
+                                          category=np.asarray(phoCategory[phosel]),
                                           lepFlavor=lepton,
                                           systematic=syst,
-                                          weight=evtWeight[phosel])
+                                          weight=evtWeight[phosel])  # FIXME 3
                 
                 # fill photon_chIso histogram, using the loosePhotons array (photons passing all cuts, except the charged hadron isolation cuts)
                 output['photon_chIso'].fill(dataset=dataset,
-                                            chIso=leadingPhotonLoose.chIso[phoselLoose],
-                                            category=phoCategoryLoose[phoselLoose],
+                                            chIso=np.asarray(leadingPhotonLoose.chIso[phoselLoose]),
+                                            category=np.asarray(phoCategoryLoose[phoselLoose]),
                                             lepFlavor=lepton,
                                             systematic=syst,
                                             weight=evtWeight[phoselLoose])
                 
                 # fill M3 histogram, for events passing the phosel selection
                 output['M3'].fill(dataset=dataset,
-                                  M3=M3[phosel],
-                                  category=phoCategory[phosel],
+                                  M3=np.asarray(M3[phosel]),
+                                  category=np.asarray(phoCategory[phosel]),
                                   lepFlavor=lepton,
                                   systematic=syst,
                                   weight=evtWeight[phosel])
                 
-            # 3. GET HISTOGRAM EVENT SELECTION
-            #  use the selection.all() method to select events passing the eleSel or muSel selection, 
+            # use the selection.all() method to select events passing the eleSel or muSel selection, 
             # and the 3-jet 0-btag selection, and have exactly one photon
       
             phosel_3j0t_e = selection.all('eleSel', "jetSel_3j0b", 'onePho')
             phosel_3j0t_mu = selection.all('muSel', "jetSel_3j0b", 'onePho')
 
             output['photon_lepton_mass_3j0t'].fill(dataset=dataset,
-                                                   mass=egammaMass[phosel_3j0t_e],
-                                                   category=phoCategory[phosel_3j0t_e],
+                                                   mass=np.asarray(egammaMass[phosel_3j0t_e]),
+                                                   category=np.asarray(phoCategory[phosel_3j0t_e]),
                                                    lepFlavor='electron',
                                                    systematic=syst,
                                                    weight=evtWeight[phosel_3j0t_e])
 
             output['photon_lepton_mass_3j0t'].fill(dataset=dataset,
-                                                   mass=mugammaMass[phosel_3j0t_mu],
-                                                   category=phoCategory[phosel_3j0t_mu],
+                                                   mass=np.asarray(mugammaMass[phosel_3j0t_mu]),
+                                                   category=np.asarray(phoCategory[phosel_3j0t_mu]),
                                                    lepFlavor='muon',
                                                    systematic=syst,
-                                                   weight=evtWeight[phosel_3j0t_mu])
+                                                   weight=evtWeight[phosel_3j0t_mu])  # FIXME 3
         
         return output
 
