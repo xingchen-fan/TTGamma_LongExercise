@@ -257,7 +257,6 @@ class TTGammaProcessor(processor.ProcessorABC):
             {
                 # Test histogram; not needed for final analysis but useful to check things are working
                 "all_photon_pt": hist.Hist("Counts", dataset_axis, pt_axis),
-                # 3. ADD HISTOGRAMS
                 ## book histograms for photon pt, eta, and charged hadron isolation
                 "photon_pt": hist.Hist(
                     "Counts",
@@ -274,7 +273,7 @@ class TTGammaProcessor(processor.ProcessorABC):
                     phoCategory_axis,
                     lep_axis,
                     systematic_axis,
-                ),
+                ),  # FIXME 3
                 "photon_chIso": hist.Hist(
                     "Counts",
                     dataset_axis,
@@ -537,7 +536,7 @@ class TTGammaProcessor(processor.ProcessorABC):
         selection.add("loosePho", (ak.num(loosePhotons) == 1))  # FIXME 1b
 
         # useful debugger for selection efficiency
-        if True and shift_syst is None:
+        if False and shift_syst is None:
             print(dataset)
             for n in selection.names:
                 print(
