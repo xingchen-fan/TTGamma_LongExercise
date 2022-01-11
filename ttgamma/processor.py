@@ -565,7 +565,6 @@ class TTGammaProcessor(processor.ProcessorABC):
         leadingElectron = ak.firsts(tightElectrons)
         leadingPhoton = ak.firsts(tightPhotons)
         leadingPhotonLoose = ak.firsts(loosePhotons)
-        #print( ak.sum(ak.is_none(leadingMuon)) )
         
         # define egammaMass, mass of leadingElectron and leadingPhoton system
         egammaMass = (leadingElectron + leadingPhoton).mass
@@ -895,7 +894,6 @@ class TTGammaProcessor(processor.ProcessorABC):
                             'muon': selection.all("muSel", "jetSel_3j0b", "onePho")
                            }
 
-            print('----------------------------------')
             for lepton in phosel_3j0t.keys():
                 output["photon_lepton_mass_3j0t"].fill(
                     dataset=dataset,
