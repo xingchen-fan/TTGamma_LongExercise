@@ -664,22 +664,24 @@ class TTGammaProcessor(processor.ProcessorABC):
 
             eleSF = ak.prod((eleID * eleRECO), axis=-1)
             eleSF_up = ak.prod(((eleID + eleIDerr) * (eleRECO + eleRECOerr)), axis=-1)
-            eleSF_down = ak.prod( (eleID * eleRECO), axis=-1)  # FIXME 4
-            weights.add("eleEffWeight", weight=eleSF)  # FIXME 4
+            eleSF_down = ak.prod(((eleID - eleIDerr) * (eleRECO - eleRECOerr)), axis=-1)  # FIXME 4
+            weights.add("eleEffWeight", weight=eleSF, weightUp=eleSF_up, weightDown=eleSF_down) # FIXME 4
 
             muID = mu_id_sf(tightMuons.eta, tightMuons.pt)
             muIDerr = mu_id_err(tightMuons.eta, tightMuons.pt)
             muIso = mu_iso_sf(tightMuons.eta, tightMuons.pt)
             muIsoerr = mu_iso_err(tightMuons.eta, tightMuons.pt)
-            muTrig = mu_iso_sf(abs(tightMuons.eta), tightMuons.pt)
-            muTrigerr = mu_iso_err(abs(tightMuons.eta), tightMuons.pt)
+            muTrig = mu_trig_sf(abs(tightMuons.eta), tightMuons.pt)
+            muTrigerr = mu_trig_err(abs(tightMuons.eta), tightMuons.pt)
 
             muSF = ak.prod(muID * muIso * muTrig, axis=-1)
             muSF_up = ak.prod(
                 (muID + muIDerr) * (muIso + muIsoerr) * (muTrig + muTrigerr), axis=-1
             )
-            muSF_down = ak.prod(muID * muIso * muTrig, axis=-1)  # FIXME 4
-            weights.add("muEffWeight", weight=muSF)  # FIXME 4
+            muSF_down = ak.prod(
+                (muID - muIDerr) * (muIso - muIsoerr) * (muTrig - muTrigerr), axis=-1
+            )# FIXME 4
+            weights.add("muEffWeight", weight=muSF, weightUp=muSF_up, weightDown=muSF_down)  # FIXME 4
 
             # This section sets up some of the weight shifts related to theory uncertainties
             # in some samples, generator systematics are not available, in those case the systematic weights of 1. are used
@@ -773,10 +775,10 @@ class TTGammaProcessor(processor.ProcessorABC):
             if shift_syst is None:
                 systList = [
                     "nominal",
-                    # "muEffWeightUp",
-                    # "muEffWeightDown",
-                    # "eleEffWeightUp",
-                    # "eleEffWeightDown",  # FIXME 4
+                    "muEffWeightUp",
+                    "muEffWeightDown",
+                    "eleEffWeightUp",
+                    "eleEffWeightDown",  # FIXME 4
                     "ISRUp",
                     "ISRDown",
                     "FSRUp",
