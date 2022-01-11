@@ -32,8 +32,8 @@ muEffWeight shape   1.          1.          1.          1.          1.          
 
 
 * autoMCStats 0 1 1
-#nonprompt_norm  rateParam * NonPrompt 1 [0,4]
-#MisID_norm 	rateParam * MisID 1 [0,4]
-#ZG_norm		rateParam * ZG 1 [0,4]
-#WG_norm		rateParam * WG 1 [0,4]
+nonprompt_norm  rateParam * NonPrompt 1 [0,4]
+MisID_norm 	rateParam * MisID 1 [0,4]
+ZG_norm		rateParam * ZG 1 [0,4]
+WG_norm		rateParam * WG 1 [0,4]
 ------------
