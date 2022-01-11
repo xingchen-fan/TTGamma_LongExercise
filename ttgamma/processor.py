@@ -466,22 +466,22 @@ class TTGammaProcessor(processor.ProcessorABC):
         # HINT: trigger values can be accessed with the variable events.HLT.TRIGGERNAME,
         # the bitwise or operator can be used to select multiple triggers events.HLT.TRIGGER1 | events.HLT.TRIGGER2
         selection.add(
-            "muTrigger", events.HLT.Mu50
+            "muTrigger", events.HLT.IsoMu24 | events.HLT.IsoTkMu24
         )  # FIXME 1b
-        selection.add("eleTrigger", events.HLT.Mu50)  # FIXME 1b
+        selection.add("eleTrigger", events.HLT.Ele27_WPTight_Gsf)  # FIXME 1b
 
         # oneMuon should be true if there is exactly one tight muon in the event
         # (the ak.num() method returns the number of objects in each row of a jagged array)
         selection.add("oneMuon", ak.num(tightMuons) == 1)
         # zeroMuon should be true if there are no tight muons in the event
-        selection.add("zeroMuon", np.zeros(len(events), dtype=bool))  # FIXME 1b
+        selection.add("zeroMuon", ak.num(tightMuons) == 0)  # FIXME 1b
         # we also need to know if there are any loose muons in each event
-        selection.add("zeroLooseMuon", np.zeros(len(events), dtype=bool))  # FIXME 1b
+        selection.add("zeroLooseMuon", ak.num(looseMuons) == 0)  # FIXME 1b
 
         # similar selections will be needed for electrons
-        selection.add("oneEle", np.zeros(len(events), dtype=bool))  # FIXME 1b
-        selection.add("zeroEle", np.zeros(len(events), dtype=bool))  # FIXME 1b
-        selection.add("zeroLooseEle", np.zeros(len(events), dtype=bool))  # FIXME 1b
+        selection.add("oneEle", ak.num(tightElectrons) == 1)  # FIXME 1b
+        selection.add("zeroEle", ak.num(tightElectrons) == 0)  # FIXME 1b
+        selection.add("zeroLooseEle", ak.num(looseElectrons) == 0)  # FIXME 1b
 
         # our overall muon category is then those events that pass:
         muon_cat = {
@@ -494,7 +494,14 @@ class TTGammaProcessor(processor.ProcessorABC):
         }
 
         # similarly for electrons:
-        ele_cat = {}  # FIXME 1b
+        ele_cat = {
+            "eleTrigger",
+            "passGenOverlapRemoval",
+            "oneEle",
+            "zeroLooseEle",
+            "zeroMuon",
+            "zeroLooseMuon",
+        }  # FIXME 1b
 
         selection.add("eleSel", selection.all(*ele_cat))
         selection.add("muSel", selection.all(*muon_cat))
@@ -507,17 +514,17 @@ class TTGammaProcessor(processor.ProcessorABC):
         #   And another which selects events with at least 3 tightJet and exactly zero b-tagged jet
         selection.add(
             "jetSel_3j0b",
-            np.zeros(len(events), dtype=bool),
+            (ak.num(tightJet) >= 3) & (ak.sum(tightJet.btagged, axis=-1) == 0),
         )  # FIXME 1b
 
         # add selection for events with exactly 0 tight photons
-        selection.add("zeroPho", np.zeros(len(events), dtype=bool))  # FIXME 1b
+        selection.add("zeroPho", ak.num(tightPhotons) == 0)  # FIXME 1b
 
         # add selection for events with exactly 1 tight photon
-        selection.add("onePho", np.zeros(len(events), dtype=bool))  # FIXME 1b
+        selection.add("onePho", ak.num(tightPhotons) == 1)  # FIXME 1b
 
         # add selection for events with exactly 1 loose photon
-        selection.add("loosePho", np.zeros(len(events), dtype=bool))  # FIXME 1b
+        selection.add("loosePho", ak.num(loosePhotons) == 1)  # FIXME 1b
 
         # useful debugger for selection efficiency
         if False and shift_syst is None:
