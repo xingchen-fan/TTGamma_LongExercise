@@ -185,7 +185,7 @@ def selectPhotons(photons):
     tightPhotons = photons[photonSelect & photonID]  # FIXME 1a
     # select loosePhotons, the subset of photons passing the photonSelect cut and all photonID cuts
     # except the charged hadron isolation cut applied (photonID_NoChIso)
-    loosePhotons = photons[photonSelect & photonID & photonID_NoChIso]  # FIXME 1a
+    loosePhotons = photons[photonSelect & photonID_NoChIso]  # FIXME 1a
 
     return tightPhotons, loosePhotons
 
@@ -550,7 +550,7 @@ class TTGammaProcessor(processor.ProcessorABC):
         # Find all possible combinations of 3 tight jets in the events
         # Hint: using the ak.combinations(array,n) method chooses n unique items from array.
         # More hints are in the twiki
-        triJet = ak.combinations(events.Jet, 3, fields=["first", "second", "third"])  # FIXME 2a
+        triJet = ak.combinations(tightJet, 3, fields=["first", "second", "third"])  # FIXME 2a
         # Sum together jets from the triJet object and find its pt and mass
         triJetPt = (triJet.first + triJet.second + triJet.third).pt  # FIXME 2a
         triJetMass = (triJet.first + triJet.second + triJet.third).mass  # FIXME 2a
@@ -609,10 +609,10 @@ class TTGammaProcessor(processor.ProcessorABC):
                     )
                 )
                 datasetFull = "TTGamma_SingleLept_2016"
-
+    
             puWeight = puLookup[datasetFull](events.Pileup.nTrueInt)
-            puWeight_Up = puLookup[datasetFull](events.Pileup.nTrueInt)  # FIXME 4
-            puWeight_Down = puLookup[datasetFull](events.Pileup.nTrueInt)  # FIXME 4
+            puWeight_Up = puLookup_Up[datasetFull](events.Pileup.nTrueInt)  # FIXME 4
+            puWeight_Down = puLookup_Down[datasetFull](events.Pileup.nTrueInt)  # FIXME 4
 
             # add the puWeight and it's uncertainties to the weights container
             weights.add(
@@ -685,22 +685,24 @@ class TTGammaProcessor(processor.ProcessorABC):
 
             eleSF = ak.prod((eleID * eleRECO), axis=-1)
             eleSF_up = ak.prod(((eleID + eleIDerr) * (eleRECO + eleRECOerr)), axis=-1)
-            eleSF_down = ak.prod( (eleID * eleRECO), axis=-1)  # FIXME 4
-            weights.add("eleEffWeight", weight=eleSF)  # FIXME 4
+            eleSF_down = ak.prod(((eleID - eleIDerr) * (eleRECO - eleRECOerr)), axis=-1)  # FIXME 4
+            weights.add("eleEffWeight", weight=eleSF, weightUp=eleSF_up, weightDown=eleSF_down) # FIXME 4
 
             muID = mu_id_sf(tightMuons.eta, tightMuons.pt)
             muIDerr = mu_id_err(tightMuons.eta, tightMuons.pt)
             muIso = mu_iso_sf(tightMuons.eta, tightMuons.pt)
             muIsoerr = mu_iso_err(tightMuons.eta, tightMuons.pt)
-            muTrig = mu_iso_sf(abs(tightMuons.eta), tightMuons.pt)
-            muTrigerr = mu_iso_err(abs(tightMuons.eta), tightMuons.pt)
+            muTrig = mu_trig_sf(abs(tightMuons.eta), tightMuons.pt)
+            muTrigerr = mu_trig_err(abs(tightMuons.eta), tightMuons.pt)
 
             muSF = ak.prod(muID * muIso * muTrig, axis=-1)
             muSF_up = ak.prod(
                 (muID + muIDerr) * (muIso + muIsoerr) * (muTrig + muTrigerr), axis=-1
             )
-            muSF_down = ak.prod(muID * muIso * muTrig, axis=-1)  # FIXME 4
-            weights.add("muEffWeight", weight=muSF)  # FIXME 4
+            muSF_down = ak.prod(
+                (muID - muIDerr) * (muIso - muIsoerr) * (muTrig - muTrigerr), axis=-1
+            )# FIXME 4
+            weights.add("muEffWeight", weight=muSF, weightUp=muSF_up, weightDown=muSF_down)  # FIXME 4
 
             # This section sets up some of the weight shifts related to theory uncertainties
             # in some samples, generator systematics are not available, in those case the systematic weights of 1. are used
@@ -794,10 +796,10 @@ class TTGammaProcessor(processor.ProcessorABC):
             if shift_syst is None:
                 systList = [
                     "nominal",
-                    # "muEffWeightUp",
-                    # "muEffWeightDown",
-                    # "eleEffWeightUp",
-                    # "eleEffWeightDown",  # FIXME 4
+                    "muEffWeightUp",
+                    "muEffWeightDown",
+                    "eleEffWeightUp",
+                    "eleEffWeightDown",  # FIXME 4
                     "ISRUp",
                     "ISRDown",
                     "FSRUp",
