@@ -86,7 +86,8 @@ def selectMuons(events):
     Loose muon requirements are already coded
     """
     muonSelectTight = (
-        (events.Muon.pt > 12.3)
+        (events.Muon.pt > 30.) & (abs(events.Muon.eta) < 2.4)
+        & (events.Muon.tightId) & (events.Muon.pfRelIso04_all < 0.15)
     )  # FIXME 1a
 
     muonSelectLoose = (
@@ -119,8 +120,12 @@ def selectElectrons(events):
     ) & (abs(events.Electron.dz) < 0.2)
 
     electronSelectTight = (
-        (events.Electron.pt > 34)
-        & (abs(events.Electron.eta) < 1.1)
+        (events.Electron.pt > 35)
+        & (abs(events.Electron.eta) < 2.1)
+        & (abs(events.Electron.cutBased) >= 4)
+        & eleEtaGap
+        & elePassDXY
+        & elePassDZ
     )  # FIXME 1a
 
     # select loose electrons
@@ -177,10 +182,10 @@ def selectPhotons(photons):
     )
 
     # select tightPhotons, the subset of photons passing the photonSelect cut and the photonID cut
-    tightPhotons = photons[photonSelect]  # FIXME 1a
+    tightPhotons = photons[photonSelect & photonID]  # FIXME 1a
     # select loosePhotons, the subset of photons passing the photonSelect cut and all photonID cuts
     # except the charged hadron isolation cut applied (photonID_NoChIso)
-    loosePhotons = photons[photonSelect & photonID]  # FIXME 1a
+    loosePhotons = photons[photonSelect & photonID & photonID_NoChIso]  # FIXME 1a
 
     return tightPhotons, loosePhotons
 
@@ -409,7 +414,7 @@ class TTGammaProcessor(processor.ProcessorABC):
             # If processing a jet systematic, we need to update the
             # jets to reflect the jet systematic uncertainty variations
             if shift_syst == "JERUp":
-                jets = corrected_jets.JER.down  # FIXME 1a
+                jets = corrected_jets.JER.up  # FIXME 1a
             elif shift_syst == "JERDown":
                 jets = corrected_jets.JER.down
             elif shift_syst == "JESUp":
@@ -442,7 +447,7 @@ class TTGammaProcessor(processor.ProcessorABC):
 
         # label the subset of tightJet which pass the Deep CSV tagger
         bTagWP = 0.6321  # 2016 DeepCSV working point
-        tightJet["btagged"] = tightJet.btagDeepB > 0.456  # FIXME 1a
+        tightJet["btagged"] = tightJet.btagDeepB > bTagWP  # FIXME 1a
 
         #####################
         # EVENT SELECTION
