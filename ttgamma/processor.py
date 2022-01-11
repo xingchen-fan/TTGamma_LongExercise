@@ -565,12 +565,14 @@ class TTGammaProcessor(processor.ProcessorABC):
         leadingElectron = ak.firsts(tightElectrons)
         leadingPhoton = ak.firsts(tightPhotons)
         leadingPhotonLoose = ak.firsts(loosePhotons)
-
+        #print( ak.sum(ak.is_none(leadingMuon)) )
+        
         # define egammaMass, mass of leadingElectron and leadingPhoton system
         egammaMass = (leadingElectron + leadingPhoton).mass
         # define mugammaMass analogously
         mugammaMass = leadingMuon.mass  # FIXME 2a
-
+        gammaMasses = {'electron': egammaMass, 'muon': mugammaMass }
+        
         ###################
         # PHOTON CATEGORIES
         ###################
@@ -889,26 +891,20 @@ class TTGammaProcessor(processor.ProcessorABC):
             # use the selection.all() method to select events passing the eleSel or muSel selection,
             # and the 3-jet 0-btag selection, and have exactly one photon
 
-            phosel_3j0t_e = selection.all("eleSel", "jetSel_3j0b", "onePho")
-            phosel_3j0t_mu = selection.all("muSel", "jetSel_3j0b", "onePho")
+            phosel_3j0t = { 'electron': selection.all("eleSel", "jetSel_3j0b", "onePho"),
+                            'muon': selection.all("muSel", "jetSel_3j0b", "onePho")
+                           }
 
-            output["photon_electron_mass_3j0t"].fill(
-                dataset=dataset,
-                mass=np.asarray(egammaMass[phosel_3j0t_e]),
-                category=np.asarray(phoCategory[phosel_3j0t_e]),
-                lepFlavor="electron",
-                systematic=syst,
-                weight=evtWeight[phosel_3j0t_e],
-            )
-
-            output["photon_muon_mass_3j0t"].fill(
-                dataset=dataset,
-                mass=np.asarray(egammaMass[phosel_3j0t_mu]),
-                category=np.asarray(phoCategory[phosel_3j0t_mu]),
-                lepFlavor="mu",
-                systematic=syst,
-                weight=evtWeight[phosel_3j0t_mu],
-            )
+            print('----------------------------------')
+            for lepton in phosel_3j0t.keys():
+                output["photon_lepton_mass_3j0t"].fill(
+                    dataset=dataset,
+                    mass=np.asarray(gammaMasses[lepton][phosel_3j0t[lepton]]),
+                    category=np.asarray(phoCategory[phosel_3j0t[lepton]]),
+                    lepFlavor=lepton,
+                    systematic=syst,
+                    weight=evtWeight[phosel_3j0t[lepton]],
+                )
             # output["photon_lepton_mass_3j0t"].fill()  # FIXME 3
 
         return output
