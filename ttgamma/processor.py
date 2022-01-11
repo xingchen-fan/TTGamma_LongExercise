@@ -264,7 +264,14 @@ class TTGammaProcessor(processor.ProcessorABC):
                     lep_axis,
                     systematic_axis,
                 ),
-                # "photon_eta": hist.Hist(...),  # FIXME 3
+                "photon_eta": hist.Hist(
+                    "Counts",
+                    dataset_axis,
+                    eta_axis,
+                    phoCategory_axis,
+                    lep_axis,
+                    systematic_axis,
+                ),  # FIXME 3
                 "photon_chIso": hist.Hist(
                     "Counts",
                     dataset_axis,
@@ -831,7 +838,7 @@ class TTGammaProcessor(processor.ProcessorABC):
                 # the lepton selection, 4-jet 1-tag jet selection, and either the one-photon or loose-photon selections
                 phosel = selection.all(lepSel, "jetSel_4j1b", "onePho")
                 phoselLoose = selection.all(
-                    lepSel, "jetSel_4j1b", "zeroPho"
+                    lepSel, "jetSel_4j1b", "loosePho"
                 )  # FIXME 3
 
                 # fill photon_pt and photon_eta, using the leadingPhoton array, from events passing the phosel selection
@@ -849,6 +856,14 @@ class TTGammaProcessor(processor.ProcessorABC):
                     weight=evtWeight[phosel],
                 )
 
+                output["photon_eta"].fill(
+                    dataset=dataset,
+                    eta=np.asarray(leadingPhoton.eta[phosel]),
+                    category=np.asarray(phoCategory[phosel]),
+                    lepFlavor=lepton,
+                    systematic=syst,
+                    weight=evtWeight[phosel],
+                )
                 # output["photon_eta"].fill()  # FIXME 3
 
                 # fill photon_chIso histogram, using the loosePhotons array (photons passing all cuts, except the charged hadron isolation cuts)
@@ -877,7 +892,7 @@ class TTGammaProcessor(processor.ProcessorABC):
             phosel_3j0t_e = selection.all("eleSel", "jetSel_3j0b", "onePho")
             phosel_3j0t_mu = selection.all("muSel", "jetSel_3j0b", "onePho")
 
-            output["photon_lepton_mass_3j0t"].fill(
+            output["photon_electron_mass_3j0t"].fill(
                 dataset=dataset,
                 mass=np.asarray(egammaMass[phosel_3j0t_e]),
                 category=np.asarray(phoCategory[phosel_3j0t_e]),
@@ -886,6 +901,14 @@ class TTGammaProcessor(processor.ProcessorABC):
                 weight=evtWeight[phosel_3j0t_e],
             )
 
+            output["photon_muon_mass_3j0t"].fill(
+                dataset=dataset,
+                mass=np.asarray(egammaMass[phosel_3j0t_mu]),
+                category=np.asarray(phoCategory[phosel_3j0t_mu]),
+                lepFlavor="mu",
+                systematic=syst,
+                weight=evtWeight[phosel_3j0t_mu],
+            )
             # output["photon_lepton_mass_3j0t"].fill()  # FIXME 3
 
         return output
