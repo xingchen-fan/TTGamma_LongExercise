@@ -208,15 +208,16 @@ def categorizeGenPhoton(photon):
 
     # define the photon categories for tight photon events
     # a genuine photon is a reconstructed photon which is matched to a generator level photon, and does not have a hadronic parent
-    isGenPho = matchedPho  # FIXME 2b
+    isGenPho = matchedPho & (~hadronicParent) # FIXME 2b
     # a hadronic photon is a reconstructed photon which is matched to a generator level photon, but has a hadronic parent
-    isHadPho = ~matchedPho # FIXME 2b
+    isHadPho = matchedPho & hadronicParent # FIXME 2b
     # a misidentified electron is a reconstructed photon which is matched to a generator level electron
-    isMisIDele = ~matchedPho  # FIXME 2b
+    isMisIDele = matchedEle # FIXME 2b matchedEle and matchedPho are exclusive
     # a hadronic/fake photon is a reconstructed photon that does not fall within any of the above categories
-    isHadFake = ~matchedPho  # FIXME 2b
+    isHadFake = ~(isGenPho | isHadPho | isMisIDele) # FIXME 2b
 
     # integer definition for the photon category axis
+    # since false = 0 , true = 1, this only leaves the integer value of the category it falls into
     return 1 * isGenPho + 2 * isMisIDele + 3 * isHadPho + 4 * isHadFake
 
 
@@ -549,29 +550,33 @@ class TTGammaProcessor(processor.ProcessorABC):
         # Find all possible combinations of 3 tight jets in the events
         # Hint: using the ak.combinations(array,n) method chooses n unique items from array.
         # More hints are in the twiki
-        # triJet = ak.combinations()  # FIXME 2a
+        triJet = ak.combinations(events.Jet, 3, fields=["first", "second", "third"])  # FIXME 2a
         # Sum together jets from the triJet object and find its pt and mass
-        # triJetPt = ().pt  # FIXME 2a
-        # triJetMass = ().mass  # FIXME 2a
+        triJetPt = (triJet.first + triJet.second + triJet.third).pt  # FIXME 2a
+        triJetMass = (triJet.first + triJet.second + triJet.third).mass  # FIXME 2a
         # define the M3 variable, the triJetMass of the combination with the highest triJetPt value
         # (ak.argmax and ak.firsts will be helpful here)
-        M3 = np.ones(len(events)) # FIXME 2a
+        highPtIdx= ak.argmax(triJetPt, axis=-1, keepdims=True)
+        M3 = triJetMass[highPtIdx]
+        
 
         # For all the other event-level variables, we can form the variables from just
         # the leading (in pt) objects rather than form all combinations and arbitrate them
         # this is because all of our signal and control regions require exactly zero or one of them
         # so there is no ambiguity to resolve
+        # (highest pt, muon is muon and antimuon. objects are sorted by pt, first is always highest)
         leadingMuon = ak.firsts(tightMuons)
         leadingElectron = ak.firsts(tightElectrons)
         leadingPhoton = ak.firsts(tightPhotons)
         leadingPhotonLoose = ak.firsts(loosePhotons)
         
         # define egammaMass, mass of leadingElectron and leadingPhoton system
-        egammaMass = (leadingElectron + leadingPhoton).mass
+        egammaMass  = (leadingElectron + leadingPhoton).mass
         # define mugammaMass analogously
-        mugammaMass = leadingMuon.mass  # FIXME 2a
+     
+        mugammaMass = (leadingMuon + leadingPhoton).mass  # FIXME 2a
         gammaMasses = {'electron': egammaMass, 'muon': mugammaMass }
-        
+
         ###################
         # PHOTON CATEGORIES
         ###################
@@ -880,7 +885,7 @@ class TTGammaProcessor(processor.ProcessorABC):
                 # fill M3 histogram, for events passing the phosel selection
                 output["M3"].fill(
                     dataset=dataset,
-                    M3=np.asarray(M3[phosel]),
+                    M3=np.asarray(ak.flatten(M3[phosel])),
                     category=np.asarray(phoCategory[phosel]),
                     lepFlavor=lepton,
                     systematic=syst,
