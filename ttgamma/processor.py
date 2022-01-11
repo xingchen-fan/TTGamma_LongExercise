@@ -588,10 +588,10 @@ class TTGammaProcessor(processor.ProcessorABC):
                     )
                 )
                 datasetFull = "TTGamma_SingleLept_2016"
-
+    
             puWeight = puLookup[datasetFull](events.Pileup.nTrueInt)
-            puWeight_Up = puLookup[datasetFull](events.Pileup.nTrueInt)  # FIXME 4
-            puWeight_Down = puLookup[datasetFull](events.Pileup.nTrueInt)  # FIXME 4
+            puWeight_Up = puLookup_Up[datasetFull](events.Pileup.nTrueInt)  # FIXME 4
+            puWeight_Down = puLookup_Down[datasetFull](events.Pileup.nTrueInt)  # FIXME 4
 
             # add the puWeight and it's uncertainties to the weights container
             weights.add(
