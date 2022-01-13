@@ -11,17 +11,17 @@ from ttgamma.utils.plotting import RebinHist, SetRangeHist
 # NOTE: your timestamps will differ!
 outputMC = accumulate(
     [
-        util.load("Outputs/output_MCTTGamma_run20211216_114449.coffea"),
-        util.load("Outputs/output_MCSingleTop_run20211216_124610.coffea"),
-        util.load("Outputs/output_MCTTbar1l_run20211216_121317.coffea"),
-        util.load("Outputs/output_MCTTbar2l_run20211216_122542.coffea"),
-        util.load("Outputs/output_MCWJets_run20211216_142316.coffea"),
-        util.load("Outputs/output_MCZJets_run20211216_130754.coffea"),
-        util.load("Outputs/output_MCOther_run20211216_165125.coffea"),
+        util.load("Outputs/output_MCTTGamma_run20220112_120649.coffea"),
+        util.load("Outputs/output_MCSingleTop_run20220112_094110.coffea"),
+        util.load("Outputs/output_MCTTbar1l_run20220112_132255.coffea"),
+        util.load("Outputs/output_MCTTbar2l_run20220112_121152.coffea"),
+        util.load("Outputs/output_MCWJets_run20220112_094156.coffea"),
+        util.load("Outputs/output_MCZJets_run20220112_094237.coffea"),
+        util.load("Outputs/output_MCOther_run20220112_101705.coffea"),
     ]
 )
 
-outputData = util.load("Outputs/output_Data_run20211216_171828.coffea")
+outputData = util.load("Outputs/output_Data_run20220112_101625.coffea")
 
 grouping_cat = {
     "Prompt": slice(1, 2),
